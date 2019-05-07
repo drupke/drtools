@@ -8,11 +8,11 @@
 ;    SPECTRA
 ;
 ; :Returns:
-;    Postscript plots.
 ;
 ; :Params:
 ;    flux: in, required, type=dblarr
-;       Flux in W/m^2. 1 W/m^2 = 10^7*10^4 erg/s/cm^2 = 10^11 erg/s/cm^2.
+;       Flux in W/m^2. 1 W = 10^7 erg/s, and 1 m^2 = 10^4 cm^2.
+;       So 1 W/m^2 = 10^7 erg/s / 10^4 cm^2 = 10^3 erg/s/cm^2
 ;       If input is in Jy (=10^-26 W/m^2/Hz), then output is 10^26 W/Hz.
 ;    dist: in, required, type=double
 ;       Luminosity distance in Mpc.
@@ -61,24 +61,29 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z
+function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z,watts=watts
 
    if keyword_set(z) then dist=lumdist(z)
 
    if keyword_set(log) then begin
       lum = flux + 7d + alog10(4d*!DPI) + 2d*alog10(dist) + 44d + alog10(9.5213d)
-      if ~ keyword_set(ergs) then lum = lum - alog10(3.826d) - 33d
+      if keyword_set(watts) then lum -= 7d
+      if ~ keyword_set(ergs) AND ~ keyword_set(wmsq) $
+         then lum = lum - alog10(3.826d) - 33d
    endif else begin
       lum = flux * 1d7 * 4d * !DPI * dist^2d * 9.5213d44
-      if keyword_set(err) then $
+      if keyword_set(watts) then lum /= 1d7
+      if keyword_set(err) then begin
          lumerr = err * 1d7 * 4D * !DPI * dist^2d * 9.5213d44
-      if ~ keyword_set(ergs) then begin
+         if keyword_set(watts) then lumerr /= 1d7
+      endif
+      if ~ keyword_set(ergs) AND ~ keyword_set(watts) then begin
          lum /= 3.826d33
          if keyword_set(err) then lumerr /= 3.826d33
       endif
    endelse
 
    if ~ keyword_set(err) OR keyword_set(log) then return,lum $
-   else return,[[lum],[err]]
+   else return,[[lum],[lumerr]]
 
 end

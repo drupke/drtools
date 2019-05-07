@@ -35,9 +35,11 @@
 ; :History:
 ;    ChangeHistory::
 ;      2016sep16, DSNR, created; inspired by R. da Silva's STRUCT_PASS
+;      2019may07, DSNR, changed call to RANDOMU for compatibility with versions
+;                       prior to IDL 8.2.2
 ;
 ; :Copyright:
-;    Copyright (C) 2016 David S. N. Rupke
+;    Copyright (C) 2016--2019 David S. N. Rupke
 ;
 ;    This program is free software: you can redistribute it and/or
 ;    modify it under the terms of the GNU General Public License as
@@ -57,7 +59,8 @@
 pro drt_bridgestruct,struct,obj,level=level,outvarname=outvarname
 
 ;  name of temporary variable in child process
-   tmpvarname='tmpvar'+string(randomu(!NULL,/ulong),for='(I0)')
+;   tmpvarname='tmpvar'+string(randomu(!NULL,/ulong),for='(I0)')
+   tmpvarname='tmpvar'+string(abs(randomu(!NULL,/long)),for='(I0)')
 
 ;  Get name of structure
    if keyword_set(outvarname) then structobj=outvarname $
