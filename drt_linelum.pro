@@ -11,8 +11,9 @@
 ;
 ; :Params:
 ;    flux: in, required, type=dblarr
-;       Flux in W/m^2. 1 W = 10^7 erg/s, and 1 m^2 = 10^4 cm^2.
-;       So 1 W/m^2 = 10^7 erg/s / 10^4 cm^2 = 10^3 erg/s/cm^2
+;       Flux in W/m^2 (or multiply flux in erg/s/cm^2 by 10^-3)
+;       [1 W = 10^7 erg/s, and 1 m^2 = 10^4 cm^2.
+;        So 1 W/m^2 = 10^7 erg/s / 10^4 cm^2 = 10^3 erg/s/cm^2]
 ;       If input is in Jy (=10^-26 W/m^2/Hz), then output is 10^26 W/Hz.
 ;    dist: in, required, type=double
 ;       Luminosity distance in Mpc.
@@ -71,6 +72,7 @@ function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z,watts=watts
       if ~ keyword_set(ergs) AND ~ keyword_set(wmsq) $
          then lum = lum - alog10(3.826d) - 33d
    endif else begin
+;     last factor is m^2 per Mpc^2
       lum = flux * 1d7 * 4d * !DPI * dist^2d * 9.5213d44
       if keyword_set(watts) then lum /= 1d7
       if keyword_set(err) then begin
