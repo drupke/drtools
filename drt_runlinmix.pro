@@ -1,16 +1,34 @@
 ; docformat = 'rst'
 ;
 ;+
+; 
+; Run LINMIX_ERR with default settings and process posterior distributions to 
+; extract best fit and 1sigma error envelope at each input x-value. Optionally
+; return also 2sigma error envelope.
 ;
 ; :Categories:
 ;    DRTOOLS
 ;
 ; :Returns:
+;     [5, npts] array. First column is best-fit values, second is bottom of 
+;     one-sigma envelope, third is top of one-sigma envelope, fourth is 
+;     bottom of two-sigma envelope, fifth is top of two-sigma envelope.
 ;
 ; :Params:
-;    initdat: in, required, type=structure
-;
+;     x: in, required, type=dblarr(N)
+;     y: in, required, type=dblarr(N)
+;     xerr: in, optional, type=dblarr(N)
+;     yerr: in, optional, type=dblarr(N)
+;    
 ; :Keywords:
+;     alpha: out, optional, type=dblarr(5)
+;        Bestfit, -1sigma, +1sigma, -2sigma, and +2sigma values for slope.
+;     beta: out, optional, type=dblarr(5)
+;        Same, but for intercept.
+;     corr: out, optional, type=dblarr(5)
+;        Same, but for correlation coefficient.
+;     sigsqr: out, optional, type=dblarr(5)
+;        Same, but for intrinsic scatter.
 ; 
 ; :Author:
 ;    David S. N. Rupke::
@@ -23,9 +41,10 @@
 ; :History:
 ;    ChangeHistory::
 ;      2018oct19, DSNR, created
+;      2021jan28, DSNR, changed default to return
 ;    
 ; :Copyright:
-;    Copyright (C) 2018 David S. N. Rupke
+;    Copyright (C) 2018--2021 David S. N. Rupke
 ;
 ;    This program is free software: you can redistribute it and/or
 ;    modify it under the terms of the GNU General Public License as
@@ -42,7 +61,27 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,onesig=onesig,$
+function drt_procpostlinmix,dist,signum,twosignum
+
+   npost = n_elements(dist)
+   signum = fix(erf(1d/sqrt(2d))/2d*npost)
+   twosignum = fix(erf(2d/sqrt(2d))/2d*npost)
+
+   bestpar = median(dist)
+   sortpar = dist(sort(dist))
+   ibestpar = value_locate(sortpar,bestpar)
+   siglopar = bestpar - sortpar[ibestpar-signum]
+   sighipar = sortpar[ibestpar+signum] - bestpar
+   twosiglopar = bestpar - sortpar[ibestpar-twosignum]
+   twosighipar = sortpar[ibestpar+twosignum] - bestpar
+   par=[bestpar,siglopar,sighipar,twosiglopar,twosighipar]
+
+   return,par
+
+end
+
+
+function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,$
                        alpha=alpha,beta=beta,corr=corr,sigsqr=sigsqr
 
 ;   if ~ keyword_set(xerr) then xerr=0
@@ -57,64 +96,34 @@ function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,onesig=onesig,$
       LINMIX_ERR,x,y,post,/silent $ ;,seed=seed
    else $
       LINMIX_ERR,x,y,post,xsig=xerr,ysig=yerr,/silent ;,seed=seed
-   npost = n_elements(post.alpha)
    nfit = n_elements(x)
-   signum = fix(0.34*npost)
-   twosignum = fix((1d - 0.9545d)/2d*npost)
+   npost = n_elements(post.alpha)
+   signum = fix(erf(1d/sqrt(2d))/2d*npost)
+   twosignum = fix(erf(2d/sqrt(2d))/2d*npost)
 
-   bestalpha = median(post.alpha)
-   sortalpha = post(sort(post.alpha)).alpha
-   ibestalpha = value_locate(sortalpha,bestalpha)
-   sigloalpha = bestalpha - sortalpha[ibestalpha-signum]
-   sighialpha = sortalpha[ibestalpha+signum] - bestalpha
-   twosigloalpha = sortalpha[twosignum-1]
-   twosighialpha = sortalpha[(npost-1)-twosignum]
-   alpha=[twosigloalpha,bestalpha,twosighialpha]
-
-   bestbeta = median(post.beta)
-   sortbeta = post(sort(post.beta)).beta
-   ibestbeta = value_locate(sortbeta,bestbeta)
-   siglobeta = bestbeta - sortbeta[ibestbeta-signum]
-   sighibeta = sortbeta[ibestbeta+signum] - bestbeta
-   twosiglobeta = sortbeta[twosignum-1]
-   twosighibeta = sortbeta[(npost-1)-twosignum]
-   beta=[twosiglobeta,bestbeta,twosighibeta]
-
-   bestcorr = median(post.corr)
-   sortcorr = post(sort(post.corr)).corr
-   ibestcorr = value_locate(sortcorr,bestcorr)
-   siglocorr = bestcorr - sortcorr[ibestcorr-signum]
-   sighicorr = sortcorr[ibestcorr+signum] - bestcorr
-   twosiglocorr = sortcorr[twosignum-1]
-   twosighicorr = sortcorr[(npost-1)-twosignum]
-   corr=[twosiglocorr,bestcorr,twosighicorr]
-
-   bestsigsqr = median(post.sigsqr)
-   sortsigsqr = post(sort(post.sigsqr)).sigsqr
-   ibestsigsqr = value_locate(sortsigsqr,bestsigsqr)
-   siglosigsqr = bestsigsqr - sortsigsqr[ibestsigsqr-signum]
-   sighisigsqr = sortsigsqr[ibestsigsqr+signum] - bestsigsqr
-   twosiglosigsqr = sortsigsqr[twosignum-1]
-   twosighisigsqr = sortsigsqr[(npost-1)-twosignum]
-   sigsqr=[twosiglosigsqr,bestsigsqr,twosighisigsqr]
+   alpha = drt_procpostlinmix(post.alpha)
+   beta = drt_procpostlinmix(post.beta)
+   corr = drt_procpostlinmix(post.corr)
+   sigsqr = drt_procpostlinmix(post.sigsqr)
 
    fitvals = median(post.alpha) + median(post.beta)*x
    modpts = rebin(post.alpha,npost,nfit) + $
             rebin(post.beta,npost,nfit)*$
             rebin(transpose(x),npost,nfit)
-   yloenv = dblarr(nfit)
-   yhienv = dblarr(nfit)
+   yloenv_sig = dblarr(nfit)
+   yhienv_sig = dblarr(nfit)
+   yloenv_twosig = dblarr(nfit)
+   yhienv_twosig = dblarr(nfit)
    for i=0,nfit-1 do begin
       sortvals = modpts(sort(modpts(*,i)),i)
-      if keyword_set(onesig) then begin
-         yloenv[i] = sortvals[signum-1]
-         yhienv[i] = sortvals[(npost-1)-signum]
-      endif else begin
-         yloenv[i] = sortvals[twosignum-1]
-         yhienv[i] = sortvals[(npost-1)-twosignum]
-      endelse
+      medfitval = median(sortvals)
+      ifitval = value_locate(sortvals,medfitval) ;fitvals[i])
+      yloenv_sig[i] = sortvals[ifitval - signum]
+      yhienv_sig[i] = sortvals[ifitval + signum]
+      yloenv_twosig[i] = sortvals[ifitval - twosignum]
+      yhienv_twosig[i] = sortvals[ifitval + twosignum]
    endfor
 
-   return,[[fitvals],[yloenv],[yhienv]]
+   return,[[fitvals],[yloenv_sig],[yhienv_sig],[yloenv_twosig],[yhienv_twosig]]
 
 end

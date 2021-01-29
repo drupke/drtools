@@ -2,11 +2,12 @@
 OVERVIEW
 -------------------------------------------------------------------------
 
-DRTOOLS is an IDL repository of general-purpose software. The idea is
-for it to be an ever-expanding toolbox from my routine catalog, as I
-get around to properly commenting and licensing old routines or make
-new ones. How well this works remains to be seen, but I have seeded it
-with four routines.
+DRTOOLS is an IDL repository of general-purpose software.
+
+It contains a number of routines for multicore processing in
+IDL. These include four routines written by Robert da Silva which are
+no longer available online, so I have bundled them in this repo in
+subdirectory rds.
 
 -------------------------------------------------------------------------
 REQUIREMENTS
@@ -21,6 +22,8 @@ IDL libraries:
    http://www.idlcoyote.com/documents/programs.php#COYOTE_LIBRARY_DOWNLOAD
   [or from the GitHub repository:
    https://github.com/davidwfanning/idl-coyote/tree/master/coyote]
+- SPLIT_FOR requires X_CHKFIL from XIDL:
+  https://github.com/profxj/xidl
 
 Note that the IDL Astronomy User's Library ships with some Coyote
 routines. However, it's not clear how well these libraries keep track
@@ -47,7 +50,7 @@ Modifications are encouraged, but subject to the license.
 LICENSE AND COPYRIGHT
 -------------------------------------------------------------------------
 
-Copyright (C) 2016 David S. N. Rupke
+Copyright (C) 2016--2021 David S. N. Rupke
 
 These programs are free software: you can redistribute them and/or
 modify them under the terms of the GNU General Public License as
