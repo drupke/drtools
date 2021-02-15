@@ -42,6 +42,8 @@
 ;    ChangeHistory::
 ;      2018oct19, DSNR, created
 ;      2021jan28, DSNR, changed default to return
+;      2021feb08, DSNR, added option for metropolitan-hastings sampler
+;      2021feb09, DSNR, option to output p-value, input miniter
 ;    
 ; :Copyright:
 ;    Copyright (C) 2018--2021 David S. N. Rupke
@@ -61,7 +63,7 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_procpostlinmix,dist,signum,twosignum
+function drt_procpostlinmix,dist,signum,twosignum,pval=pval
 
    npost = n_elements(dist)
    signum = fix(erf(1d/sqrt(2d))/2d*npost)
@@ -76,26 +78,40 @@ function drt_procpostlinmix,dist,signum,twosignum
    twosighipar = sortpar[ibestpar+twosignum] - bestpar
    par=[bestpar,siglopar,sighipar,twosiglopar,twosighipar]
 
+   ; Compute p-value if this is a correlation coefficient
+   if keyword_set(pval) then begin
+      izero = value_locate(sortpar,0d)
+      npts_dbl = double(n_elements(sortpar))
+      pvalll =  1d/npts_dbl ; default upper limit
+      pval = pvalll
+      if bestpar gt 0 then begin
+         if izero gt -1 then pval = double(izero)/npts_dbl
+      endif else begin
+         if izero lt n_elements(sortpar) then pval = 1d - double(izero)/npts_dbl
+      endelse
+      if pval eq pvalll then pval = [pvalll,1d] else pval = [pval,0d]
+   endif  
+     
    return,par
 
 end
 
 
-function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,$
-                       alpha=alpha,beta=beta,corr=corr,sigsqr=sigsqr
+function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,$
+                       alpha=alpha,beta=beta,corr=corr,sigsqr=sigsqr,$
+                       metro=metro,pval=pval,miniter=miniter
 
-;   if ~ keyword_set(xerr) then xerr=0
-;   if ~ keyword_set(yerr) then yerr=0
-;   if ~ keyword_set(seed) then seed = 12345
+   if ~ keyword_set(metro) then metro=0b else metro=1b
+   if ~ keyword_set(miniter) then miniter=5000L
 
    if ~ keyword_set(xerr) AND keyword_set(yerr) then $
-      LINMIX_ERR,x,y,post,ysig=yerr,/silent $;,seed=seed
+      LINMIX_ERR,x,y,post,ysig=yerr,/silent,metro=metro,miniter=miniter $
    else if ~ keyword_set(yerr) AND keyword_set(xerr) then $
-      LINMIX_ERR,x,y,post,xsig=xerr,/silent $;,seed=seed
+      LINMIX_ERR,x,y,post,xsig=xerr,/silent,metro=metro,miniter=miniter $
    else if ~ keyword_set(yerr) AND ~ keyword_set(xerr) then $
-      LINMIX_ERR,x,y,post,/silent $ ;,seed=seed
+      LINMIX_ERR,x,y,post,/silent,metro=metro,miniter=miniter $
    else $
-      LINMIX_ERR,x,y,post,xsig=xerr,ysig=yerr,/silent ;,seed=seed
+      LINMIX_ERR,x,y,post,xsig=xerr,ysig=yerr,/silent,metro=metro,miniter=miniter
    nfit = n_elements(x)
    npost = n_elements(post.alpha)
    signum = fix(erf(1d/sqrt(2d))/2d*npost)
@@ -103,7 +119,8 @@ function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,$
 
    alpha = drt_procpostlinmix(post.alpha)
    beta = drt_procpostlinmix(post.beta)
-   corr = drt_procpostlinmix(post.corr)
+   pval=1b
+   corr = drt_procpostlinmix(post.corr,pval=pval)
    sigsqr = drt_procpostlinmix(post.sigsqr)
 
    fitvals = median(post.alpha) + median(post.beta)*x
@@ -116,8 +133,7 @@ function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,yfitseed=seed,$
    yhienv_twosig = dblarr(nfit)
    for i=0,nfit-1 do begin
       sortvals = modpts(sort(modpts(*,i)),i)
-      medfitval = median(sortvals)
-      ifitval = value_locate(sortvals,medfitval) ;fitvals[i])
+      ifitval = n_elements(sortvals)/2 ; this is about the median index
       yloenv_sig[i] = sortvals[ifitval - signum]
       yhienv_sig[i] = sortvals[ifitval + signum]
       yloenv_twosig[i] = sortvals[ifitval - twosignum]
