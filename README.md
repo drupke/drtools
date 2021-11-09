@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/68748458.svg)](https://zenodo.org/badge/latestdoi/68748458)
+
 ## OVERVIEW
 
 `drtools` is an IDL repository of general-purpose software.
