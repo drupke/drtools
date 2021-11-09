@@ -79,17 +79,22 @@ function drt_procpostlinmix,dist,signum,twosignum,pval=pval
    par=[bestpar,siglopar,sighipar,twosiglopar,twosighipar]
 
    ; Compute p-value if this is a correlation coefficient
+   ; second element of array indicates whether or not this is an upper limit
+   ; 1 = upper limit, 0 = not
    if keyword_set(pval) then begin
+      ; where does 0-value appear
       izero = value_locate(sortpar,0d)
       npts_dbl = double(n_elements(sortpar))
-      pvalll =  1d/npts_dbl ; default upper limit
-      pval = pvalll
+      pvalul =  1d/npts_dbl ; default upper limit
+      pval = pvalul
+      ; case of positive cc
       if bestpar gt 0 then begin
          if izero gt -1 then pval = double(izero)/npts_dbl
+      ; and negative cc
       endif else begin
          if izero lt n_elements(sortpar) then pval = 1d - double(izero)/npts_dbl
       endelse
-      if pval eq pvalll then pval = [pvalll,1d] else pval = [pval,0d]
+      if pval eq pvalul then pval = [pvalul,1d] else pval = [pval,0d]
    endif  
      
    return,par
@@ -99,19 +104,28 @@ end
 
 function drt_runlinmix,x,y,xerr=xerr,yerr=yerr,$
                        alpha=alpha,beta=beta,corr=corr,sigsqr=sigsqr,$
-                       metro=metro,pval=pval,miniter=miniter
+                       metro=metro,pval=pval,miniter=miniter,detected=detected,$
+                       maxiter=maxiter,ngauss=ngauss,verbose=verbose
 
    if ~ keyword_set(metro) then metro=0b else metro=1b
-   if ~ keyword_set(miniter) then miniter=5000L
+   if ~ keyword_set(miniter) then miniter=5000L ; default from linmix_err
+   if ~ keyword_set(ngauss) then ngauss=3 ; default from linmix_err
+   if ~ keyword_set(maxiter) then miniter=100000L ; default from linmix_err
+   if ~ keyword_set(detected) then detected=bytarr(n_elements(x))+1b
+   if keyword_set(verbose) then silent=0b else silent=1b
 
    if ~ keyword_set(xerr) AND keyword_set(yerr) then $
-      LINMIX_ERR,x,y,post,ysig=yerr,/silent,metro=metro,miniter=miniter $
+      LINMIX_ERR,x,y,post,ysig=yerr,silent=silent,metro=metro,miniter=miniter,$
+         delta=detected,maxiter=maxiter,ngauss=ngauss $
    else if ~ keyword_set(yerr) AND keyword_set(xerr) then $
-      LINMIX_ERR,x,y,post,xsig=xerr,/silent,metro=metro,miniter=miniter $
+      LINMIX_ERR,x,y,post,xsig=xerr,silent=silent,metro=metro,miniter=miniter,$
+      delta=detected,maxiter=maxiter,ngauss=ngauss $
    else if ~ keyword_set(yerr) AND ~ keyword_set(xerr) then $
-      LINMIX_ERR,x,y,post,/silent,metro=metro,miniter=miniter $
+      LINMIX_ERR,x,y,post,silent=silent,metro=metro,miniter=miniter,$
+      delta=detected,maxiter=maxiter,ngauss=ngauss $
    else $
-      LINMIX_ERR,x,y,post,xsig=xerr,ysig=yerr,/silent,metro=metro,miniter=miniter
+      LINMIX_ERR,x,y,post,xsig=xerr,ysig=yerr,silent=silent,metro=metro,$
+      miniter=miniter,delta=detected,maxiter=maxiter,ngauss=ngauss
    nfit = n_elements(x)
    npost = n_elements(post.alpha)
    signum = fix(erf(1d/sqrt(2d))/2d*npost)
