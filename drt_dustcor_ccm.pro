@@ -30,6 +30,8 @@
 ;        Observed values of E(B-V), one per flux.
 ;
 ; :Keywords:
+;    log: in, optional, type=boolean
+;        If set, input/output fluxes and errors are one-sided in the log.
 ;    rv: in, optional, type=double, default=3.1
 ;        Total selective extinction A(V)/E(B-V).
 ;    fluxerr: in, optional, type=dblarr(N)
@@ -54,6 +56,7 @@
 ; :History:
 ;    ChangeHistory::
 ;      2009sep08, DSNR, created
+;      2021dec17, DSNR, update E(B-V) error calculation
 ;
 ; :Copyright:
 ;    Copyright (C) 2021 David S. N. Rupke
@@ -74,7 +77,8 @@
 ;
 ;-
 function drt_dustcor_ccm,lambda,flux,ebv,rv=rv,fluxerr=fluxerr,$
-                         ebverr=ebverr,relative=relative,tran=tran
+                         ebverr=ebverr,relative=relative,tran=tran,$
+                         log=log
 
   if ~ keyword_set(rv) then rv=3.1d
 
@@ -91,7 +95,10 @@ function drt_dustcor_ccm,lambda,flux,ebv,rv=rv,fluxerr=fluxerr,$
   fint = dblarr(n_elements(ebv))
   finterr = dblarr(n_elements(ebv))
   if ctpos gt 0 then $
-     fint[posebv] = flux[posebv] * 10d^(coeff * ebv[posebv])
+     if not keyword_set(log) then $
+        fint[posebv] = flux[posebv] * 10d^(coeff * ebv[posebv]) $
+     else $
+        fint[posebv] = flux[posebv] + coeff*ebv[posebv]
   if ctneg gt 0 then $
      fint[negebv] = flux[negebv]
 
@@ -100,16 +107,30 @@ function drt_dustcor_ccm,lambda,flux,ebv,rv=rv,fluxerr=fluxerr,$
   if keyword_set(fluxerr) then begin
      doerr=1
      if ctpos gt 0 then $
-        finterr[posebv] += fluxerr[posebv] * 10d^(coeff * ebv[posebv])
+        if not keyword_set(log) then $
+           finterr[posebv] += fluxerr[posebv] * 10d^(coeff * ebv[posebv]) $
+        else $
+           finterr[posebv] += fluxerr[posebv]
      if ctneg gt 0 then $
         finterr[negebv] = fluxerr[negebv]
   endif
   if keyword_set(ebverr) then begin
      doerr=1
-     if ctpos gt 0 then $
-        finterr[posebv] += ebverr[posebv] * flux[posebv] * coeff * $
-                           alog(10d) * exp(coeff * alog(10d) * $
-                                           ebv[posebv])
+     if ctpos gt 0 then begin
+;       New approach and old approach
+;       First one is from dfint = sqrt[(dfint/df*finterr)^2+(dfint/debv*ebverr)^2)]
+;       second one is ... ?
+        if not keyword_set(log) then begin
+           finterr[posebv] = finterr[posebv]^2d
+           finterr[posebv] += (coeff * fint[posebv] * ebverr[posebv])^2d
+           finterr[posebv] = sqrt(finterr[posebv])
+;        finterr[posebv] += ebverr[posebv] * flux[posebv] * coeff * $
+;                           alog(10d) * exp(coeff * alog(10d) * $
+;                                           ebv[posebv])
+        endif else begin
+           finterr[posebv] = sqrt(finterr[posebv]^2d + (coeff*ebverr[posebv])^2d)
+        endelse
+     endif
      if ctneg gt 0 then $
         finterr[negebv] = fluxerr[negebv]
   endif
