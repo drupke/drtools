@@ -1,115 +1,202 @@
 pro makani_esi_plots
 
-   iap = 1
-   apname = '3"nuc'
-   iap = 2
-   apname = '2"nuc'
-   iap = 3
-   apname = '+1.7"'
-   iap = 4
-   apname = '-1.7"'
-   iap = 5
-   apname = '3"W_cent'
-   iap = 7
-   apname = '3"W_cent-1.7"'
+   bad = 1d99
+   
+   ; Planck cosmology
+   dist = drt_plumdist(0.459d)
 
-   aplabp1 = string(iap+1,format='(I0)')
-   aplab = string(iap,format='(I0)')
+   ; label apertures
+   naps = 7
+   apnames = ['nuc-3"','nuc-2"','1.7"-NE','1.7"-SW','3.3"-W','3.7"-30degNoW',$
+      '3.7"-30degSofW']
 
+   ; fluxes, line ratios
+   restore,'/Users/drupke/specfits/esi/makani/makani.lin.xdr'
+   ; redshifts
+   restore,'/Users/drupke/specfits/esi/makani/makani.lininit.xdr'
+   ; stellar properties
+   restore,'/Users/drupke/specfits/esi/makani/makani.cont.xdr'
+   ; Get data
    linelab = 1b
    linelist = ifsf_linelist(/all,/vacuum,linelab=linelab,/quiet)
-   restore,'/Users/drupke/specfits/esi/makani/makani_000'+aplabp1+'.xdr'
-   restore,'/Users/drupke/specfits/esi/makani/makani.lin.xdr'
-   restore,'/Users/drupke/specfits/esi/makani/makani.lininit.xdr'
-   restore,'/Users/drupke/specfits/esi/makani/makani.cont.xdr'
+
+   ; fluxes and errors of lines
    fx = hash()
    fxe = hash()
-   foreach key,emlflx['fc1'].keys() do begin
-      if iap eq 1 or iap eq 2 then begin
-         fx[key] = [emlflx['fc1',key,iap],emlflx['fc2',key,iap],emlflx['ftot',key,iap]]
-         fxe[key] = [emlflxerr['fc1',key,iap],emlflxerr['fc2',key,iap],emlflxerr['ftot',key,iap]]
-      endif else begin
-         fx[key] = [emlflx['fc1',key,iap]]
-         fxe[key] = [emlflxerr['fc1',key,iap]]
-      endelse
-   endforeach
-   z = reform(emlz['[OII]3729',iap,*,*])
-   sig = reform(emlsiginit['[OII]3729',iap,*,*])
-   stel_z = contcube.stel_z[iap]
-   stel_sigma = contcube.stel_sigma[iap]
-   stel_ebv = contcube.stel_ebv[iap]
-
-   lrs = ifsf_lineratios(fx,fxe,linelist,errlo=lrsel,errhi=lrseh,errlin=lrselin)
    ecfx = hash()
    ecfxe = hash()
-   foreach key,fx.keys() do begin
-      ec_tmp = drt_dustcor_ccm(linelist[key],fx[key],lrs['ebv'],$
-         ebverr=lrselin['ebv'],fluxerr=fxe[key])
-      ecfx[key] = ec_tmp[*,0]
-      ecfxe[key] = ec_tmp[*,1]
-   endforeach
+   ; gas zs and sigmas
+   z = dindgen(naps,2) + bad
+   sig = dindgen(naps,2) + bad
+   ; populate stellar properties
+   stel_z = contcube.stel_z[1:naps]
+   stel_sigma = contcube.stel_sigma[1:naps]
+   stel_ebv = contcube.stel_ebv[1:naps]
+   ; line ratios
+   lrs = hash()
+   lrsel = hash()
+   lrseh = hash()
+   lrselin = hash()
+   eclrs = hash()
+   eclrsel = hash()
+   eclrseh = hash()
+   eclrselin = hash()
+   ; densities
+   dens_s2 = dindgen(naps,3) + bad
+   dens_s2errlo = dindgen(naps,3) + bad
+   dens_s2errhi = dindgen(naps,3) + bad
+   dens_o2 = dindgen(naps,3) + bad
+   dens_o2errlo = dindgen(naps,3) + bad
+   dens_o2errhi = dindgen(naps,3) + bad
+   ; Halpha luminosities
+   loghalum = dindgen(naps,3) + bad
+   loghalumerrlo = dindgen(naps,3) + bad
+   loghalumerrhi = dindgen(naps,3) + bad
+   ; Ionized gas masses, derived from Halpha
+   hamass = dindgen(naps,3) + bad
+   hamasserrlo = dindgen(naps,3) + bad
+   hamasserrhi = dindgen(naps,3) + bad
+   ; Halpha star formation rates
+   hasfr = dindgen(naps,3) + bad
+   hasfrerr = dindgen(naps,3) + bad
+   
+   ; output text table
+   openw,luntxt1,'/Users/drupke/ifs/esi/docs/makani_esi_gasprop.txt',/get_lun
+   openw,luntxt2,'/Users/drupke/ifs/esi/docs/makani_esi_gasvel.txt',/get_lun
+   openw,luntxt3,'/Users/drupke/ifs/esi/docs/makani_esi_stars.txt',/get_lun
+   openw,luntxt4,'/Users/drupke/ifs/esi/docs/makani_esi_chandra.txt',/get_lun
+   printf,luntxt1,'Name','ebv','err','logrho_s2','errlo','errhi','logrho_o2',$
+      'errlo','errhi','hiimass','errlo','errhi','SFR','err',$
+      format='(A-20,13A10)
+   printf,luntxt2,'Name','z','siginit',format='(A-20,2A10)
+   printf,luntxt3,'Name','z','sigma','ebv',format='(A-20,3A10)
+   printf,luntxt4,'Name','[OII]/Ha',format='(A-20,1A10)
+   
+   for iap=0,naps-1 do begin
+      iapp1 = iap+1
+      ; populate fluxes and errors of lines
+      foreach key,emlflx['fc1'].keys() do begin
+         if iap eq 0 then begin
+            fx[key] = dindgen(naps,3)+bad
+            fxe[key] = dindgen(naps,3)+bad
+         endif
+         if iap eq 0 or iap eq 1 then begin
+            fx[key,iap,*] = [emlflx['fc1',key,iapp1],$
+               emlflx['fc2',key,iapp1],$
+               emlflx['ftot',key,iapp1]]
+            fxe[key,iap,*] = [emlflxerr['fc1',key,iapp1],$
+               emlflxerr['fc2',key,iapp1],$
+               emlflxerr['ftot',key,iapp1]]
+         endif else begin
+            fx[key,iap,*] = [emlflx['fc1',key,iapp1],$
+               bad,$
+               emlflx['fc1',key,iapp1]]
+            fxe[key,iap,*] = [emlflxerr['fc1',key,iapp1],$
+               bad,$
+               emlflxerr['fc1',key,iapp1]]
+         endelse
+      endforeach
+      ; populate gas zs and sigmas
+      z_tmp = reform(emlz['[OII]3729',iapp1,*,*])
+      z[iap,0:n_elements(z_tmp)-1] = z_tmp
+      sig_tmp = reform(emlsiginit['[OII]3729',iapp1,*,*])
+      sig[iap,0:n_elements(z_tmp)-1] = sig_tmp
+      for i=0,n_elements(z_tmp)-1 do begin
+         if z[iap,i] ne bad then begin
+            name = apnames[iap]+'_'+string(i+1,format='(I0)')
+            printf,luntxt2,name,z[iap,i],sig[iap,i],format='(A-20,D10.6,D10.2)
+         endif
+      endfor
+   endfor
+
+   ; compute extincted line ratios
+   lrs = ifsf_lineratios(fx,fxe,linelist,errlo=lrsel,errhi=lrseh,errlin=lrselin)
+  
+   for iap=0,naps-1 do begin
+      iapp1 = iap+1
+      ; compute E(B-V)
+      foreach key,fx.keys() do begin
+         if iap eq 0 then begin
+            ecfx[key] = dindgen(naps,3)+bad
+            ecfxe[key] = dindgen(naps,3)+bad
+         endif
+         igd = where(fx[key,iap,*] ne bad AND lrs['ebv',iap,*] ne bad,ctgd)
+         if ctgd gt 0 then begin
+            ec_tmp = drt_dustcor_ccm(linelist[key],fx[key,iap,igd],$
+               lrs['ebv',iap,igd],$
+               ebverr=lrselin['ebv',iap,igd],fluxerr=fxe[key,iap,igd])
+            ecfx[key,iap,igd] = ec_tmp[*,0]
+            ecfxe[key,iap,igd] = ec_tmp[*,1]
+         endif
+      endforeach
+   endfor
+   
+   ; compute unextincted line ratios
    eclrs = ifsf_lineratios(ecfx,ecfxe,linelist,errlo=eclrsel,errhi=eclrseh,$
       errlin=eclrselin,/lronly)
 
-   drt_voplot,lrs,'/Users/drupke/ifs/esi/plots/makani_esi_ap'+aplab+'_vo_noextcor.eps',$
-      errlo=lrsel,errhi=lrseh,scol=['cg1','cg2','cg3']
-   drt_voplot,eclrs,'/Users/drupke/ifs/esi/plots/makani_esi_ap'+aplab+'_vo.eps',$
-      errlo=eclrsel,errhi=eclrseh,scol=['cg1','cg2','cg3']
+   drt_voplot,lrs,'/Users/drupke/ifs/esi/plots/makani_esi_vo_noextcor.eps',$
+      errlo=lrsel,errhi=lrseh ;,scol=['cg1','cg2','cg3']
+   drt_voplot,eclrs,'/Users/drupke/ifs/esi/plots/makani_esi_vo.eps',$
+      errlo=eclrsel,errhi=eclrseh ;,scol=['cg1','cg2','cg3']
 
-   dens_s2 = drt_nebden(10d^lrs['s2'],'s2',err=lrselin['s2'])
-   dens_o2 = drt_nebden(10d^lrs['o2'],'o2',err=lrselin['o2'])
+   igds2 = where(lrs['s2'] ne bad)
+   dens_s2[igds2] = drt_nebden(10d^lrs['s2',igds2],'s2',$
+      err=lrselin['s2',igds2],denerrlo=dens_s2errlo_tmp,$
+      denerrhi=dens_s2errhi_tmp)
+   dens_s2errlo[igds2] = dens_s2errlo_tmp
+   dens_s2errhi[igds2] = dens_s2errhi_tmp
+   igdo2 = where(lrs['o2'] ne bad)
+   dens_o2[igdo2] = drt_nebden(10d^lrs['o2',igdo2],'o2',$
+      err=lrselin['o2',igdo2],denerrlo=dens_o2errlo_tmp,$
+      denerrhi=dens_o2errhi_tmp)
+   dens_o2errlo[igdo2] = dens_o2errlo_tmp
+   dens_o2errhi[igdo2] = dens_o2errhi_tmp
 
    ; fluxes, luminosities, etc.
-   ; Planck cosmology
-   dist = lumdist(0.459d, H0=67.4d, Omega_M = 0.315d, Lambda0 = 0.685d, /silent)
-   haflux = ecfx['Halpha']*1d-16
-   hafluxerr = ecfxe['Halpha']*1d-16
-   halum = drt_linelum(haflux*1d-3,dist,/ergs,err=hafluxerr*1d-3)
-   ;print,halum
-   loghalum = alog10(halum[*,0])
-   loghalumerr = [[loghalum - alog10(halum[*,0] - halum[*,1])],$
-      [alog10(halum[*,0]+halum[*,1])-loghalum]]
-   hamass = drt_hiimass(loghalum,dens_s2[*,0],errlum=loghalumerr,$
-      errden=dens_s2[*,1:2],/log)
-   
-   openw,luntxt,'/Users/drupke/ifs/esi/docs/makani_esi_ap'+aplab+'.txt',/get_lun
-   
-   if iap eq 1 or iap eq 2 or iap eq 5 or iap eq 7 then begin
-      ; https://ned.ipac.caltech.edu/level5/Sept12/Calzetti/Calzetti1_2.html
-      hasfr = 5.5d-42 * halum
-      printf,luntxt,'Halpha SFR (from c1, in Msun/yr): ',hasfr[0,0],'+/-',hasfr[0,1],$
-         format='(A0,D0.2,A0,D0.2)'
-   endif
-   
-   printf,luntxt,'Name','ebv','err','logrho_s2','errlo','errhi','logrho_o2','errlo','errhi','hiimass','errlo','errhi',$
-      format='(A-10,11A10)
-   name = apname+['_1','_2','_T']
-   for i=0,n_elements(lrs['ebv'])-1 do begin
-      printf,luntxt,name[i],lrs['ebv',i],lrsel['ebv',i],$
-         dens_s2[i,0],dens_s2[i,1],dens_s2[i,2],$
-         dens_o2[i,0],dens_o2[i,1],dens_o2[i,2],$
-         hamass[i,0],hamass[i,1],hamass[i,2],$
-         format='(A-10,11D10.4)
+   igdha = where(ecfx['Halpha'] ne bad AND ecfxe['Halpha'] ne bad)
+   haflux = ecfx['Halpha',igdha]*1d-16*1d-3
+   hafluxerr = ecfxe['Halpha',igdha]*1d-16*1d-3
+   halum = drt_linelum(haflux,dist,/ergs,err=hafluxerr,$
+      lumerr=halumerr)
+   loghalum[igdha] = alog10(halum)
+   loghalumerrlo[igdha] = loghalum[igdha] - alog10(halum - halumerr)
+   loghalumerrhi[igdha] = alog10(halum+halumerr)-loghalum[igdha]
+   hamass[igdha] = drt_hiimass(loghalum[igdha],dens_s2[igdha],$
+      errlum=[[loghalumerrlo[igdha]],[loghalumerrhi[igdha]]],$
+      errden=[[dens_s2errlo[igdha]],[dens_s2errhi[igdha]]],/log,$
+      masserr=hamasserr_tmp)
+   hamasserrlo[igdha] = hamasserr_tmp[*,0]
+   hamasserrhi[igdha] = hamasserr_tmp[*,1]
+      
+   ; https://ned.ipac.caltech.edu/level5/Sept12/Calzetti/Calzetti1_2.html
+   hasfr[igdha] = 5.5d-42 * halum
+   hasfrerr[igdha] = 5.5d-42 * halumerr
+
+   for iap=0,naps-1 do begin
+      if iap eq 0 or iap eq 1 then $
+         name = apnames[iap]+['_1','_2','_T'] $
+      else name = apnames[iap]+['_T']
+      for i=0,n_elements(name)-1 do begin
+         printf,luntxt1,name[i],lrs['ebv',iap,i],lrsel['ebv',iap,i],$
+            dens_s2[iap,i],dens_s2errlo[iap,i],dens_s2errhi[iap,i],$
+            dens_o2[iap,i],dens_o2errlo[iap,i],dens_o2errhi[iap,i],$
+            hamass[iap,i],hamasserrlo[iap,i],hamasserrhi[iap,i],$
+            hasfr[iap,i],hasfrerr[iap,i],$
+            format='(A-20,13D10.4)
+         if fx['Halpha',iap,i] ne bad AND $
+            fx['[OII]3726+[OII]3729',iap,i] ne bad then $
+            printf,luntxt4,name[i],$
+               fx['[OII]3726+[OII]3729',iap,i]/fx['Halpha',iap,i],$
+               format='(A-20,D10.4)'
+      endfor
+      printf,luntxt3,apnames[iap],stel_z[iap],stel_sigma[iap],stel_ebv[iap],$
+         format='(A-20,D10.6,2D10.2)
    endfor
 
-   printf,luntxt,'Name','z','siginit',format='(A-10,2A10)
-   name = apname+['_1','_2']
-   for i=0,n_elements(z)-1 do begin
-      printf,luntxt,name[i],z[i],sig[i],format='(A-10,D10.6,D10.2)
-   endfor
-
-   printf,luntxt,'Name','z','sigma','ebv',format='(A-10,3A10)
-   name = apname+['_stel']
-   for i=0,n_elements(stel_z)-1 do begin
-      printf,luntxt,name[i],stel_z[i],stel_sigma[i],stel_ebv[i],format='(A-10,D10.6,2D10.2)
-   endfor
-
-   free_lun,luntxt
-
-;   drt_voplot,lrs,'/Users/drupke/ifs/esi/plots/makani_esi_ap'+aplab+'_vo_noextcor.eps',$
-;      errlo=lrsel,errhi=lrseh,scol=['cg1','cg2','cg3']
-;   drt_voplot,eclrs,'/Users/drupke/ifs/esi/plots/makani_esi_ap'+aplab+'_vo.eps',$
-;      errlo=eclrsel,errhi=eclrseh,scol=['cg1','cg2','cg3']
-
+   free_lun,luntxt1
+   free_lun,luntxt2
+   free_lun,luntxt3
+   free_lun,luntxt4
 
 end

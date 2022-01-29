@@ -62,7 +62,7 @@ pro drt_voplot,lrat,fileroot,errlo=errlo,errhi=errhi,scol=scol
    types = lrat.keys()
    ssize = dblarr(n_elements(lrat[types[0]]))+1d
    stype = intarr(n_elements(lrat[types[0]]))+16
-   if ~ keyword_set(scol) then scol = strarr(n_elements(types[0]))+'Black'
+   if ~ keyword_set(scol) then scol = strarr(99)+'Black'
 
 ; [NII]/Halpha vs. [OIII]/Hb
 

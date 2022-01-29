@@ -8,9 +8,11 @@
 ;    SPECTRA
 ;
 ; :Returns:
+; 
+; Luminosity array, and optionally error array.
 ;
 ; :Params:
-;    flux: in, required, type=dblarr
+;    flux: in, required, type=dblarr(N)
 ;       Flux in W/m^2 (or multiply flux in erg/s/cm^2 by 10^-3)
 ;       [1 W = 10^7 erg/s, and 1 m^2 = 10^4 cm^2.
 ;        So 1 W/m^2 = 10^7 erg/s / 10^4 cm^2 = 10^3 erg/s/cm^2]
@@ -22,11 +24,11 @@
 ;    ergs: in, optional, type=byte
 ;      Output in erg/s.
 ;    err: in, optional, type=dblarr
-;      Compute error in luminosity; set this keyword to the error array. Output
-;      is then an N x 2 array, where N is the number of fluxes, and the second
-;      dimension is lum. and error. Doesn't function yet if input is logged.
+;      Compute error in luminosity; set this keyword to the input error array. 
 ;    log: in, optional, type=byte
 ;      Input flux and output luminosity are in log_10 space.
+;    lumerr: out, optional, type=dblarr(N)
+;      Output luminosity error.
 ;    z: in, optional, type=double
 ;      Use redshift instead of distance. D_L then computed using default
 ;      cosmology in ASTROLIB routine LUMDIST.
@@ -43,9 +45,10 @@
 ;    ChangeHistory::
 ;      2008jan28, DSNR, created
 ;      2016sep01, DSNR, added copyright and documentation
+;      2022jan28, DSNR, luminosity error now outputs through keyword
 ;
 ; :Copyright:
-;    Copyright (C) 2016 David S. N. Rupke
+;    Copyright (C) 2016-2022 David S. N. Rupke
 ;
 ;    This program is free software: you can redistribute it and/or
 ;    modify it under the terms of the GNU General Public License as
@@ -62,7 +65,8 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z,watts=watts
+function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z,watts=watts,$
+   lumerr=lumerr
 
    if keyword_set(z) then dist=lumdist(z)
 
@@ -85,7 +89,6 @@ function drt_linelum,flux,dist,ergs=ergs,err=err,log=log,z=z,watts=watts
       endif
    endelse
 
-   if ~ keyword_set(err) OR keyword_set(log) then return,lum $
-   else return,[[lum],[lumerr]]
-
+   return,lum
+   
 end

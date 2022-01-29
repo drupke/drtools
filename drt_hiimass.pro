@@ -18,12 +18,14 @@
 ;    den: in, required, type=dblarr(N)
 ;
 ; :Keywords:
-;    errlum: in, optional, type=dblarr(N)
-;      Input one-sided error in luminosity.
+;    errlum: in, optional, type=dblarr(N) or dblarr(N,2)
+;      Input luminosity error. One-sided if linear, two-sided if log.
 ;    errden: in, optional, type=dblarr(N) or dblarr(N,2)
 ;      Input density error. One-sided if linear, two-sided if log.
 ;    log: in, optional, type=byte
 ;      Input luminosity, density, and errors, and output mass, are in log space.
+;    masserr: out, optional, type=dblarr(N) or dblarr(N,2)
+;      Output error in mass. One-sided if linear, two-sided if log.
 ;
 ; :Author:
 ;    David S. N. Rupke::
@@ -36,9 +38,10 @@
 ; :History:
 ;    ChangeHistory::
 ;      2021dec20, DSNR, created
+;      2022jan28, DSNR, error now outputs through keyword
 ;
 ; :Copyright:
-;    Copyright (C) 2021 David S. N. Rupke
+;    Copyright (C) 2021-2022 David S. N. Rupke
 ;
 ;    This program is free software: you can redistribute it and/or
 ;    modify it under the terms of the GNU General Public License as
@@ -55,7 +58,7 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_hiimass,lum,den,errlum=errlum,errden=errden,log=log
+function drt_hiimass,lum,den,errlum=errlum,errden=errden,log=log,masserr=masserr
 
    ; mass per particle, in solar masses
    mumpsm = 1.4d*1.672649d-24 / 1.989d33
@@ -67,20 +70,16 @@ function drt_hiimass,lum,den,errlum=errlum,errden=errden,log=log
 
    if not keyword_set(log) then begin
       mass = mumpsm * lum / volemis / den
-      if keyword_set(errlum) then errmass1 = errlum/lum else errmass1=0d
-      if keyword_set(errden) then errmass2 = errden/den else errmass2=0d
-      errmass = mass * sqrt(errmass1^2d + errmass2^2d)
-      if keyword_set(errlum) or keyword_set(errden) then $
-         return,[[mass],[errmass]] $
-      else return, mass
+      if keyword_set(errlum) then masserr1 = errlum/lum else masserr1=0d
+      if keyword_set(errden) then masserr2 = errden/den else masserr2=0d
+      masserr = mass * sqrt(masserr1^2d + masserr2^2d)
+      return, mass
    endif else begin
       mass = lmumpsm + lum - lvolemis - den
-      if keyword_set(errlum) then errmass1 = errlum else errmass1=0d
-      if keyword_set(errden) then errmass2 = errden else errmass2=0d
-      errmass = sqrt(errmass1^2d + reverse(errmass2)^2d)
-      if keyword_set(errlum) or keyword_set(errden) then $
-         return,[[mass],[errmass]] $
-      else return, mass
+      if keyword_set(errlum) then masserr1 = errlum else masserr1=0d
+      if keyword_set(errden) then masserr2 = errden else masserr2=0d
+      masserr = sqrt(masserr1^2d + reverse(masserr2)^2d)
+      return, mass
    endelse
 
 end
