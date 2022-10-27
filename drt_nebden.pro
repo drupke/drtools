@@ -40,6 +40,7 @@
 ;    ChangeHistory::
 ;      2021dec16, DSNR, created
 ;      2022jan28, DSNR, error now outputs through keyword
+;      2022may24, DSNR, changed minrat, maxrat
 ;
 ; :Copyright:
 ;    Copyright (C) 2021-2022 David S. N. Rupke
@@ -63,33 +64,48 @@ function drt_nebden,rat,type,err=err,denerrlo=denerrlo,denerrhi=denerrhi
    bad = 1d99
    ;  Values for computing electron density
    ;  from Sanders, Shapley, et al. 2016
+   ; [OII] and [SII], respectively
    minrat = [0.3839d,0.4375d]
    maxrat = [1.4558d,1.4484d]
    a = [0.3771d,0.4315d]
    b = [2468d,2107d]
    c = [638.4d,627.1d]
-   maxden = [1d5,1d5]
-   minden = [1d1,1d1]
+   ;maxden = alog10((c*minrat - a*b)/(a - minrat))
+   ;minden = alog10((c*maxrat - a*b)/(a - maxrat))
+   ; According to Sanders et al., the min/max ratios correspond to these limiting values
+   ; We conservatively set the actual limits factor of 10 higher and lower, respectively
+   minden = [1.,1.]
+   maxden = [4.,4.]
    if type eq 'o2' then i=0 else i=1
    den = alog10((c[i]*rat - a[i]*b[i])/(a[i] - rat))
+   ; Errors
    if keyword_set(err) then begin
       ; from delt_rat = drho/drat * delt_rat
       ;denerr = abs((c[i]/(c[i]*rat - a[i]*b[i]) + 1d/(a[i] - rat))/alog(10d)) * err
       ; from simply adding or subtracting the ratio
       denerrlo = alog10((c[i]*(rat+err) - a[i]*b[i])/(a[i] -(rat+err)))
       denerrhi = alog10((c[i]*(rat-err) - a[i]*b[i])/(a[i] -(rat-err)))
-      ilo = where(rat+err ge maxrat[i] OR denerrlo lt alog10(minden[i]),ctlo)
-      ihi = where(rat-err le minrat[i] OR (denerrhi gt alog10(maxden[i]) AND denerrhi ne bad),cthi)
-      if ctlo gt 0 then denerrlo[ilo] = alog10(minden[i])
-      if cthi gt 0 then denerrhi[ihi] = alog10(maxden[i])
+      ;  Check for hitting upper/lower ratio limit. Set 
+      ilo = where(rat+err ge maxrat[i] OR denerrlo le minden[i],ctlo)
+      ihi = where(rat-err le minrat[i] OR (denerrhi ge maxden[i] AND denerrhi ne bad),cthi)
+      if ctlo gt 0 then denerrlo[ilo] = minden[i]
+      if cthi gt 0 then denerrhi[ihi] = maxden[i]
    endif
-   ilo = where(rat ge maxrat[i] OR den lt alog10(minden[i]),ctlo)
-   ihi = where(rat le minrat[i] OR (den gt alog10(maxden[i]) AND den ne bad),cthi)
-   if ctlo gt 0 then den[ilo] = alog10(minden[i])
-   if cthi gt 0 then den[ihi] = alog10(maxden[i])
-
+   ; Error bar is difference with measured value. Difference for limit is 0
+   ; according to formula above.
    denerrlo = den - denerrlo
    denerrhi = denerrhi - den
+;  Check for hitting upper/lower ratio limit
+   ilo = where(rat ge maxrat[i] OR den le minden[i],ctlo)
+   ihi = where(rat le minrat[i] OR (den ge maxden[i] AND den ne bad),cthi)
+   if ctlo gt 0 then begin
+      den[ilo] = minden[i]
+      denerrlo[ilo] = 0d
+   endif
+   if cthi gt 0 then begin
+      den[ihi] = maxden[i]
+      denerrhi[ihi] = 0d
+   endif
 
    return,den
 end
