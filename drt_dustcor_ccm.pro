@@ -57,9 +57,10 @@
 ;    ChangeHistory::
 ;      2009sep08, DSNR, created
 ;      2021dec17, DSNR, update E(B-V) error calculation
+;      2023oct12, DSNR, check that E(B-V) != bad
 ;
 ; :Copyright:
-;    Copyright (C) 2021 David S. N. Rupke
+;    Copyright (C) 2009-2023 David S. N. Rupke
 ;
 ;    This program is free software: you can redistribute it and/or
 ;    modify it under the terms of the GNU General Public License as
@@ -80,6 +81,8 @@ function drt_dustcor_ccm,lambda,flux,ebv,rv=rv,fluxerr=fluxerr,$
                          ebverr=ebverr,relative=relative,tran=tran,$
                          log=log
 
+  bad = 1d99
+
   if ~ keyword_set(rv) then rv=3.1d
 
   alamav = drt_extcurve_ccm(lambda,rv=rv)
@@ -88,7 +91,7 @@ function drt_dustcor_ccm,lambda,flux,ebv,rv=rv,fluxerr=fluxerr,$
 
 ; Only apply extinction correction if calculated extinction is greater
 ; than 0.
-  posebv = where(ebv ge 0,ctpos)
+  posebv = where(ebv ge 0 AND ebv ne bad,ctpos)
   negebv = where(ebv lt 0,ctneg)
 
 ; Fluxes

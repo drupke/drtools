@@ -28,6 +28,7 @@
 ;    symsize: in, optional, type=dblarr
 ;       Arrays with the same shape as each line ratio array to specify
 ;       properties of each point.
+;    labels: in, optional, type=strarr
 ;    
 ; :Author:
 ;    David S. N. Rupke::
@@ -66,7 +67,7 @@
 ;
 ;-
 pro drt_voplot,lrat,fileroot,errlo=errlo,errhi=errhi,connect=connect,$
-   symsize=symsize,psym=psym,color=color,mask=mask
+   symsize=symsize,psym=psym,color=color,mask=mask,labels=labels
 
    bad = 1d99
 
@@ -142,6 +143,8 @@ pro drt_voplot,lrat,fileroot,errlo=errlo,errhi=errhi,connect=connect,$
       cgtext,-0.5,1.3,'AGN'
       cgtext,0.4,-1.1,'LINER'
       cgtext,-0.1,-1.1,'C'
+      if keyword_set(labels) then $
+         al_legend,labels,psym=psym,colors=color,symsize=symsize
 
    endif
 

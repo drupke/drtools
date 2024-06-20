@@ -59,7 +59,7 @@
 ;    http://www.gnu.org/licenses/.
 ;
 ;-
-function drt_clir,f12,f25,f60,f100,dist,inlog=inlog
+function drt_clir,f12,f25,f60,f100,dist,inlog=inlog,fir=fir
 
    if keyword_set(inlog) then begin
       f12 = 10d^f12
@@ -78,5 +78,5 @@ function drt_clir,f12,f25,f60,f100,dist,inlog=inlog
    ; log(L_IR / L_sun)
    lir = fir + alog10(4d*!DPI) + 2d*distcm
 
-   return,lir
+   if keyword_set(fir) then return,fir else return,lir
 end

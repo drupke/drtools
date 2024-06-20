@@ -1,3 +1,49 @@
+; docformat = 'rst'
+;
+;+
+;
+; Process data for Makani ESI spectra paper.
+;
+; :Categories:
+;    DRTOOLS
+;
+; :Returns:
+;    None.
+;
+; :Params:
+;
+; :Keywords:
+;
+; :Author:
+;    David S. N. Rupke::
+;      Rhodes College
+;      Department of Physics
+;      2000 N. Parkway
+;      Memphis, TN 38104
+;      drupke@gmail.com
+;
+; :History:
+;    ChangeHistory::
+;      2022, DSNR, created
+;
+; :Copyright:
+;    Copyright (C) 2022-2023 David S. N. Rupke
+;
+;    This program is free software: you can redistribute it and/or
+;    modify it under the terms of the GNU General Public License as
+;    published by the Free Software Foundation, either version 3 of
+;    the License or any later version.
+;
+;    This program is distributed in the hope that it will be useful,
+;    but WITHOUT ANY WARRANTY; without even the implied warranty of
+;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;    General Public License for more details.
+;
+;    You should have received a copy of the GNU General Public License
+;    along with this program.  If not, see
+;    http://www.gnu.org/licenses/.
+;
+;-
 pro makani_esi_plots
 
    bad = 1d99
@@ -164,6 +210,26 @@ pro makani_esi_plots
       endfor
    endfor
 
+   ; Apply Galactic extinction correction
+   ; https://irsa.ipac.caltech.edu/applications/DUST/
+   ; SDSS J211824.06+001729.3
+   galext = 0.0684d ; +/-0.0021
+   for iap=0,naps-1 do begin
+      iapp1 = iap+apoff
+      foreach key,fx.keys() do begin
+         igd = where(fx[key,iap,*] ne bad,ctgd)
+         if ctgd gt 0 then begin
+            galextarr = fx[key,iap,igd]*0d + galext
+            ; Oops! Didn't redshift linelist for paper, so Gal. ext. cor. overestimated
+            ;ec_tmp = drt_dustcor_ccm(linelist[key],fx[key,iap,igd],$
+            ec_tmp = drt_dustcor_ccm(linelist[key]*1.459,fx[key,iap,igd],$
+               galextarr,fluxerr=fxe[key,iap,igd])
+            fx[key,iap,igd] = ec_tmp[*,0]
+            fxe[key,iap,igd] = ec_tmp[*,1]
+         endif
+      endforeach
+   endfor
+
    ; Set Halpha using Hbeta for aperture 9
    fx['Halpha',8,0:2] = 2.86d*fx['Hbeta',8,0:2]
 
@@ -219,7 +285,7 @@ pro makani_esi_plots
    aplenpixarr = rebin(aplenpix[0:naps-1],naps,3)
    loghblumsb[igdha] = alog10(halum) - alog10(aplenpixarr[igdha]*esips) - $
       2d*alog10(kpc_per_as * cm_per_pc * 1d3) - alog10(2.86d)
-   ;print,loghblumsb
+   print,loghblumsb
 
    ; fill in bad densities with low-den limit
    dens_s2_use = dens_s2[igdha]
@@ -1071,6 +1137,20 @@ pro makani_esi_plots
    printf,tab3,tabstr
    printf,tab3,'\hline'
 
+   ; Extinction
+   tabstr = string('E(B-V)',amp,$
+      lrs['ebv',0,0],'$\pm$',lrselin['ebv',0,0],amp,$
+      lrs['ebv',0,1],'$\pm$',lrselin['ebv',0,1],amp,$
+      lrs['ebv',0,2],'$\pm$',lrselin['ebv',0,2],$
+      format='(A30,A3,D7.3,A5,D5.3,A3,D7.3,A5,D5.3,A3,D7.3,A5,D5.3)')
+   for j=1,8 do begin
+      tabstr += string(amp,lrs['ebv',j,2],'$\pm$',lrselin['ebv',j,2],$
+         format='(A3,D6.2,A5,D4.2)')
+   endfor
+   tabstr += dslash
+   printf,tab3,tabstr
+   printf,tab3,'\hline'
+
    ; intrinsic fluxes
    for i=0,n_elements(tablines)-1 do begin
       drat1 = sqrt((ecfxe[tablines[i],0,0]/ecfx[tablines[i],0,0])^2d + $
@@ -1186,14 +1266,19 @@ pro makani_esi_plots
       o2haconv = 10d^(o2ha_exto2_pars[0]+rvor[ivor[0]]^fitpower*o2ha_exto2_pars[1])
       ;print,i,rvor[ivor[0]],o2haconv
       mapvorfha[ivor] /= o2haconv
-      if rvor[ivor[0]] lt 5d then begin
+      if rvor[ivor[0]] lt 5.5d then begin
          ; correct fluxes inside 5kpc for contribution from star formation
+         ; !!! Need to comment this out for computing total Halpha luminosity !!!
+         ;; Option: apply constant observed correction to inner region
+         ;mapvorfha[ivor] = mapvorf[ivor]/10d^(yfit[0])
          mapvorfha[ivor]*=0.6d
+         mapvorfha_lo[ivor]*=0.6d
+         mapvorfha_hi[ivor]*=0.6d
          ; inside this radius, assume model is perfectly correct
          mapvorfha_lo[ivor] /= o2haconv
          mapvorfha_hi[ivor] /= o2haconv
       endif else begin
-         ; outside 5kpc, estimate model error by adding in RMS
+         ; outside inner region, estimate model error by adding in RMS
          mapvorfha_hi[ivor] /= o2haconv/2d
          mapvorfha_lo[ivor] /= o2haconv*2d
       endelse
@@ -1202,6 +1287,8 @@ pro makani_esi_plots
    ; Use [OII]/Halpha fit to compute Halpha
 
    lum = hash('ep1',0d,'ep2',0d)
+   lum_hi = hash('ep1',0d,'ep2',0d)
+   lum_lo = hash('ep1',0d,'ep2',0d)
    mass = hash('ep1',0d,'ep2',0d)
    vrad =  hash('ep1',0d,'ep2',0d)
    massdot = hash('ep1',0d,'ep2',0d)
@@ -1217,6 +1304,8 @@ pro makani_esi_plots
    enerdot98 = hash('ep1',0d,'ep2',0d)
 
    map_lum = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
+   map_lum_hi = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
+   map_lum_lo = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
    map_mass = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
    map_vrad = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
    map_mom = hash('ep1',dblarr(kcwidx,kcwidy),'ep2',dblarr(kcwidx,kcwidy))
@@ -1236,8 +1325,12 @@ pro makani_esi_plots
    starage = hash('ep1',4d8,'ep2',7d6)
    radkpc = hash('ep1',40d,'ep2',15d)
    ;elecden = hash('ep1',dblarr(kcwidx,kcwidy)+1d,'ep2',dblarr(kcwidx,kcwidy)+1000d)
+   ; shock model
    elecden_pre = hash('ep1',dblarr(kcwidx,kcwidy)+1d,'ep2',dblarr(kcwidx,kcwidy)+10d)
    elecden_post = hash('ep1',dblarr(kcwidx,kcwidy)+100d,'ep2',dblarr(kcwidx,kcwidy)+1000d)
+   ; constant den, based on measured?
+   ;elecden_pre = hash('ep1',dblarr(kcwidx,kcwidy)+10d,'ep2',dblarr(kcwidx,kcwidy)+1000d)
+   ;elecden_post = hash('ep1',dblarr(kcwidx,kcwidy)+10d,'ep2',dblarr(kcwidx,kcwidy)+1000d)
 
    ; velocities in cm/s
    mapsig *= 1d5
@@ -1249,18 +1342,21 @@ pro makani_esi_plots
       radcm = 3.08567802d18 * radkpc[key] * 1d3
       ; ... in spaxels
       radpix = (radkpc[key] / kpc_per_as)/kcwips
-      iiepgd = cgsetintersection(where(map_r+0.5d lt radpix),iepgd[key])
+      iiepgd = cgsetintersection(where(map_r lt radpix),iepgd[key])
+      ;iiepgd = cgsetintersection(where(map_r+0.5d lt radpix),iepgd[key])
       ; Extra +0.5 is to prevent map_dtheta from being undefined, and will
       ; introduce an error of only half a pixel. OK if Rpix >> 1.
-      map_dtheta = asin((map_r+0.5d)/radpix) - asin((map_r-0.5d)/radpix)
-      map_dphi_sintheta = 1d/radpix
-      map_domega = map_dphi_sintheta*map_dtheta
+      ;map_dtheta = asin((map_r+0.5d)/radpix) - asin((map_r-0.5d)/radpix)
+      ;map_dphi_sintheta = 1d/radpix
+      ;map_domega = map_dphi_sintheta*map_dtheta
       map_costheta = cos(asin(map_r/radpix))
 
       map_vrad[key,iiepgd] = abs(mapv50[iiepgd]) / map_costheta[iiepgd]
       map_vrad98[key,iiepgd] = abs(mapv98[iiepgd]) / map_costheta[iiepgd]
 
       map_lum[key,iiepgd] = drt_linelum(mapvorfha[iiepgd]*1d-3,dist,/ergs)
+      map_lum_hi[key,iiepgd] = drt_linelum(mapvorfha_hi[iiepgd]*1d-3,dist,/ergs)
+      map_lum_lo[key,iiepgd] = drt_linelum(mapvorfha_lo[iiepgd]*1d-3,dist,/ergs)
       map_mass[key,iiepgd] = $
          drt_hiimass(map_lum[key,iiepgd]/2d,elecden_pre[key,iiepgd]) + $
          drt_hiimass(map_lum[key,iiepgd]/2d,elecden_post[key,iiepgd])       
@@ -1298,6 +1394,8 @@ pro makani_esi_plots
       ; in erg/s
       
       lum[key] = total(map_lum[key,iiepgd])
+      lum_hi[key] = total(map_lum_hi[key,iiepgd])
+      lum_lo[key] = total(map_lum_lo[key,iiepgd])
       mass[key] = total(map_mass[key,iiepgd])
       massdot[key] = total(map_massdot[key,iiepgd])
       mom[key] = total(map_mom[key,iiepgd])
@@ -1324,10 +1422,34 @@ pro makani_esi_plots
    endforeach
 
    ; total Ha luminosity
+   ; Note that to get the total Halpha luminosity of the nebula, comment
+   ; out correction for SF above.
    lumtot_wind = total(drt_linelum(mapvorfha[igdvorf]*1d-3,dist,/ergs))
    lumtot_wind_lo = total(drt_linelum(mapvorfha_lo[igdvorf]*1d-3,dist,/ergs))
    lumtot_wind_hi = total(drt_linelum(mapvorfha_hi[igdvorf]*1d-3,dist,/ergs))
    print,'Total Halpha luminosity:',lumtot_wind,' + ',lumtot_wind_hi-lumtot_wind,' - ',lumtot_wind-lumtot_wind_lo
+
+   ; correct wind fluxes upward for missing flux due to radial cut
+   ; lum is luminosities from spherical models with cuts in radius
+   ; lum_wind_noradcut is integrating all flux from Voronoi maps
+   foreach key, radkpc->keys() do begin
+      lum_wind_noradcut = drt_linelum(total(mapvorfha[iepgd[key]])*1d-3,dist,/ergs)
+      lum_radcor = lum_wind_noradcut / lum[key]
+      lum[key] *= lum_radcor
+      lum_hi[key] *= lum_radcor
+      lum_lo[key] *= lum_radcor
+      mass[key] *= lum_radcor
+      massdot[key] *= lum_radcor
+      mom[key] *= lum_radcor
+      momdot[key] *= lum_radcor
+      ener[key] *= lum_radcor
+      enerdot[key] *= lum_radcor
+      massdot98[key] *= lum_radcor
+      mom98[key] *= lum_radcor
+      momdot98[key] *= lum_radcor
+      ener98[key] *= lum_radcor
+      enerdot98[key] *= lum_radcor
+   endforeach
 
    openw,tab2,'/Users/drupke/ifs/esi/docs/makani_masstab.tex',/get_lun
    amp = ' & '
@@ -1344,12 +1466,12 @@ pro makani_esi_plots
          format='(A-3,A3,A3,A3,E9.2,A3,E9.2,A3,I5,A3,D6.1,A3,'+$
          'E9.2,A3,E9.2,A3,E9.2,A3,E9.2,A3)'
       ;if i eq 1 then begin
-         meth = '1b'
-         printf,tab2,epsrom[i],amp,meth,amp,lum[ep],amp,mass[ep],amp,$
-            vrad98[ep],amp,massdot98[ep],$
-            amp,mom98[ep],amp,momdot98[ep],amp,ener98[ep],amp,enerdot98[ep],dslash,$
-            format='(A-3,A3,A3,A3,E9.2,A3,E9.2,A3,I5,A3,D6.1,A3,'+$
-            'E9.2,A3,E9.2,A3,E9.2,A3,E9.2,A3)'
+      meth = '1b'
+      printf,tab2,epsrom[i],amp,meth,amp,lum[ep],amp,mass[ep],amp,$
+         vrad98[ep],amp,massdot98[ep],$
+         amp,mom98[ep],amp,momdot98[ep],amp,ener98[ep],amp,enerdot98[ep],dslash,$
+         format='(A-3,A3,A3,A3,E9.2,A3,E9.2,A3,I5,A3,D6.1,A3,'+$
+         'E9.2,A3,E9.2,A3,E9.2,A3,E9.2,A3)'
       ;endif
       meth = '2'
       printf,tab2,epsrom[i],amp,meth,amp,lum[ep],amp,mass[ep],amp,$
@@ -1360,6 +1482,9 @@ pro makani_esi_plots
          'A9,A3,A9,A3,A9,A3,A9,A3)'
       if i eq 0 then printf,tab2,'\hline'
    endfor
+   
+   print,'Errors in Ep I luminosity: ',lum_hi['ep1']-lum['ep1'],lum['ep1']-lum_lo['ep1']
+   print,'Errors in Ep II luminosity: ',lum_hi['ep2']-lum['ep2'],lum['ep2']-lum_lo['ep2']
    
    free_lun,tab2
    
